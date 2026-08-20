@@ -1004,8 +1004,18 @@ namespace lvh::detail {
         return status;
       }
 
-      for (auto code = 1; code < KEY_MAX; ++code) {
-        if (const auto status = enable_evdev_code(device, EV_KEY, code, "keyboard key"); !status.ok()) {
+      // Advertise only keys this backend can actually emit. Advertising the
+      // entire Linux key range includes power-switch and pointer buttons;
+      // udev then misclassifies the device and logind withholds it from the
+      // active graphical seat.
+      std::set<int> linux_keys;
+      for (std::uint16_t key_code = 0; key_code <= std::numeric_limits<std::uint8_t>::max(); ++key_code) {
+        if (const auto linux_key = key_code_to_linux(key_code); linux_key >= 0) {
+          linux_keys.insert(linux_key);
+        }
+      }
+      for (const auto linux_key : linux_keys) {
+        if (const auto status = enable_evdev_code(device, EV_KEY, linux_key, "keyboard key"); !status.ok()) {
           return status;
         }
       }

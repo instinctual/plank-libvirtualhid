@@ -974,6 +974,9 @@ TEST_F(LinuxBackendTest, FakeUinputConstructionCoversCapabilitiesAndFailureBranc
   EXPECT_EQ(keyboard.bustype, BUS_USB);
   EXPECT_TRUE(has_type(keyboard, EV_KEY));
   EXPECT_NE(find_code(keyboard, EV_KEY, KEY_A), nullptr);
+  EXPECT_NE(find_code(keyboard, EV_KEY, KEY_LEFTCTRL), nullptr);
+  EXPECT_EQ(find_code(keyboard, EV_KEY, KEY_POWER), nullptr);
+  EXPECT_EQ(find_code(keyboard, EV_KEY, BTN_LEFT), nullptr);
   EXPECT_EQ(keyboard.destroy_count, 1U);
 
   struct GamepadCase {
