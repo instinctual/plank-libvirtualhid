@@ -101,6 +101,7 @@ namespace lvh::detail {
 
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
     bool query_xtest(Display *display);
+    int mouse_button_to_xtest(MouseButton button);
 #endif
 #if defined(__linux__)
     namespace ps = playstation_feature_reports;
@@ -1583,9 +1584,14 @@ namespace lvh::detail {
       std::string device_name_;
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
       Display *absolute_display_ = nullptr;
+      bool absolute_mode_active_ = false;
+      std::set<MouseButton> xtest_pressed_buttons_;
 #endif
 
       OperationStatus submit_relative_motion(const MouseEvent &event) {
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+        absolute_mode_active_ = false;
+#endif
         if (event.x != 0) {
           if (const auto status = emit_event(EV_REL, REL_X, event.x); !status.ok()) {
             return status;
@@ -1603,9 +1609,13 @@ namespace lvh::detail {
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
         // Xorg/libinput classifies a device that advertises REL_X/REL_Y as a
         // relative mouse and does not expose its ABS_X/ABS_Y valuators. Keep
-        // uinput for low-latency relative motion, buttons, and scrolling, but
-        // use XTest for the absolute positioning requested by remote-desktop
-        // clients. The persistent display avoids reconnecting for every event.
+        // uinput for low-latency relative motion, but use XTest for the
+        // absolute pointer requested by remote-desktop clients. Motion and
+        // buttons must use the same X11 pointer device: mixing XTest motion
+        // with uinput buttons makes Xorg switch core-pointer slaves between a
+        // button press and release, which prevents applications from seeing a
+        // complete click. The persistent display also avoids reconnecting for
+        // every event.
         if (absolute_display_ != nullptr) {
           const auto screen = DefaultScreen(absolute_display_);
           const auto screen_width = DisplayWidth(absolute_display_, screen);
@@ -1616,8 +1626,10 @@ namespace lvh::detail {
             std::max(screen_height - 1, 0) / absolute_axis_max;
           XTestFakeMotionEvent(absolute_display_, screen, x, y, CurrentTime);
           XFlush(absolute_display_);
+          absolute_mode_active_ = true;
           return OperationStatus::success();
         }
+        absolute_mode_active_ = false;
 #endif
         if (const auto status = emit_event(EV_ABS, ABS_X, scale_absolute_axis(event.x, event.width)); !status.ok()) {
           return status;
@@ -1629,6 +1641,28 @@ namespace lvh::detail {
       }
 
       OperationStatus submit_button(const MouseEvent &event) {
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+        // A release follows the transport used for its press. This preserves
+        // button pairing if the client changes motion mode during a drag.
+        const auto use_xtest = event.pressed ?
+                                 absolute_mode_active_ :
+                                 xtest_pressed_buttons_.contains(event.button);
+        if (use_xtest && absolute_display_ != nullptr) {
+          XTestFakeButtonEvent(
+            absolute_display_,
+            mouse_button_to_xtest(event.button),
+            event.pressed ? True : False,
+            CurrentTime
+          );
+          if (event.pressed) {
+            xtest_pressed_buttons_.insert(event.button);
+          } else {
+            xtest_pressed_buttons_.erase(event.button);
+          }
+          XFlush(absolute_display_);
+          return OperationStatus::success();
+        }
+#endif
         if (const auto status = emit_event(EV_KEY, static_cast<std::uint16_t>(mouse_button_to_linux(event.button)), event.pressed ? 1 : 0); !status.ok()) {
           return status;
         }

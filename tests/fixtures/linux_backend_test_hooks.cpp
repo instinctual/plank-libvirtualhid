@@ -150,6 +150,9 @@ namespace lvh::detail::test {
       bool override_x_keycode = false;
       std::atomic_int x_keycode_call_count = 0;
       int fail_x_keycode_call = -1;
+      std::atomic_size_t xtest_motion_count = 0;
+      std::vector<std::uint32_t> xtest_buttons;
+      std::vector<bool> xtest_pressed;
       bool override_libevdev = false;
       bool libevdev_new_returns_null = false;
       bool fail_libevdev_event_type = false;
@@ -369,11 +372,18 @@ int lvh_linux_test_xtest_fake_key_event(Display *, unsigned int, Bool, unsigned 
   return 1;
 }
 
-int lvh_linux_test_xtest_fake_button_event(Display *, unsigned int, Bool, unsigned long) {
+int lvh_linux_test_xtest_fake_button_event(Display *, unsigned int button, Bool pressed, unsigned long) {
+  if (lvh::detail::test::active_test_syscalls() != nullptr) {
+    lvh::detail::test::active_test_syscalls()->xtest_buttons.push_back(button);
+    lvh::detail::test::active_test_syscalls()->xtest_pressed.push_back(pressed == True);
+  }
   return 1;
 }
 
 int lvh_linux_test_xtest_fake_motion_event(Display *, int, int, int, unsigned long) {
+  if (lvh::detail::test::active_test_syscalls() != nullptr) {
+    ++lvh::detail::test::active_test_syscalls()->xtest_motion_count;
+  }
   return 1;
 }
 
@@ -1323,6 +1333,55 @@ namespace lvh::detail::test {
     auto records = read_input_events_until_eof(descriptors[0]);
     static_cast<void>(::close(descriptors[0]));
     return {std::move(status), std::move(records)};
+  }
+
+  LinuxMouseTransportResult linux_uinput_mouse_transport_sequence() {
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+    LinuxTestSyscalls syscalls;
+    syscalls.override_write = true;
+    syscalls.override_ioctl = true;
+    syscalls.override_libevdev = true;
+    ScopedLinuxTestSyscalls scoped_syscalls {syscalls};
+
+    CreateMouseOptions options;
+    options.profile = profiles::mouse();
+    const auto fd = open_test_fd();
+    if (fd < 0) {
+      return {
+        .status = system_error_status(ErrorCode::backend_failure, "failed to open test file descriptor", errno),
+      };
+    }
+    UinputMouse mouse {fd};
+    auto status = mouse.create(1, options);
+    syscalls.write_call_count = 0;
+
+    const auto submit = [&mouse, &status](const MouseEvent &event) {
+      if (status.ok()) {
+        status = mouse.submit(event);
+      }
+    };
+
+    submit({.kind = MouseEventKind::absolute_motion, .x = 50, .y = 50, .width = 100, .height = 100});
+    submit({.kind = MouseEventKind::button, .button = MouseButton::left, .pressed = true});
+    // Switching motion mode during a drag must not move the release to uinput.
+    submit({.kind = MouseEventKind::relative_motion, .x = 1, .y = -1});
+    submit({.kind = MouseEventKind::button, .button = MouseButton::left, .pressed = false});
+    // Once relative mode is active, a complete click remains on uinput.
+    submit({.kind = MouseEventKind::button, .button = MouseButton::right, .pressed = true});
+    submit({.kind = MouseEventKind::button, .button = MouseButton::right, .pressed = false});
+
+    return {
+      .status = std::move(status),
+      .uinput_write_count = static_cast<std::size_t>(syscalls.write_call_count.load()),
+      .xtest_motion_count = syscalls.xtest_motion_count.load(),
+      .xtest_buttons = std::move(syscalls.xtest_buttons),
+      .xtest_pressed = std::move(syscalls.xtest_pressed),
+    };
+#else
+    return {
+      .status = OperationStatus::failure(ErrorCode::backend_unavailable, "XTest fallback is not enabled"),
+    };
+#endif
   }
 
   LinuxInputSubmissionResult linux_uinput_touchscreen_contact_pipe(const TouchContact &contact) {

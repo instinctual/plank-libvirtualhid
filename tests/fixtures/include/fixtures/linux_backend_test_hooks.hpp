@@ -53,6 +53,36 @@ namespace lvh::detail::test {
   };
 
   /**
+   * @brief Result from exercising the hybrid uinput/XTest mouse transport.
+   */
+  struct LinuxMouseTransportResult {
+    /**
+     * @brief Overall operation status.
+     */
+    OperationStatus status;
+
+    /**
+     * @brief Number of input_event writes made through uinput.
+     */
+    std::size_t uinput_write_count = 0;
+
+    /**
+     * @brief Number of absolute motion events sent through XTest.
+     */
+    std::size_t xtest_motion_count = 0;
+
+    /**
+     * @brief XTest button numbers in submission order.
+     */
+    std::vector<std::uint32_t> xtest_buttons;
+
+    /**
+     * @brief XTest button states in submission order.
+     */
+    std::vector<bool> xtest_pressed;
+  };
+
+  /**
    * @brief Result from a fake uinput Xbox force-feedback exchange.
    */
   struct LinuxUinputRumbleResult {
@@ -756,6 +786,13 @@ namespace lvh::detail::test {
    * @return Submission status and captured input events.
    */
   LinuxInputSubmissionResult linux_uinput_mouse_submit_pipe(const MouseEvent &event);
+
+  /**
+   * @brief Exercise absolute XTest buttons and relative uinput buttons.
+   *
+   * @return Captured transport calls and overall status.
+   */
+  LinuxMouseTransportResult linux_uinput_mouse_transport_sequence();
 
   /**
    * @brief Place and release a contact through a pipe-backed uinput touchscreen.

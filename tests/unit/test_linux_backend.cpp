@@ -656,6 +656,20 @@ TEST_F(LinuxBackendTest, PipeBackedUinputMouseEmitsEvents) {
   EXPECT_EQ(result.events[1].type, EV_SYN);
 }
 
+TEST_F(LinuxBackendTest, UinputMouseKeepsAbsoluteClicksOnXTestPointer) {
+  const auto result = lvh::detail::test::linux_uinput_mouse_transport_sequence();
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+  ASSERT_TRUE(result.status.ok()) << result.status.message();
+  EXPECT_EQ(result.xtest_motion_count, 1U);
+  EXPECT_EQ(result.xtest_buttons, (std::vector<std::uint32_t> {1U, 1U}));
+  EXPECT_EQ(result.xtest_pressed, (std::vector<bool> {true, false}));
+  // Relative X/Y/SYN plus the right-button press/SYN and release/SYN.
+  EXPECT_EQ(result.uinput_write_count, 7U);
+#else
+  EXPECT_EQ(result.status.code(), lvh::ErrorCode::backend_unavailable);
+#endif
+}
+
 TEST_F(LinuxBackendTest, PipeBackedUinputTouchDevicesEmitEvents) {
   const lvh::TouchContact contact {
     .id = 7,
