@@ -98,6 +98,10 @@ namespace lvh::detail {
     constexpr auto xbox_sparse_uinput_bus = BUS_BLUETOOTH;
     constexpr std::uint16_t xbox_wireless_uinput_product_id = 0x0B20;
     constexpr std::uint16_t xbox_series_uinput_product_id = 0x0B13;
+
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+    bool query_xtest(Display *display);
+#endif
 #if defined(__linux__)
     namespace ps = playstation_feature_reports;
     constexpr auto playstation_periodic_report_ms = 10;
@@ -1525,7 +1529,17 @@ namespace lvh::detail {
 
       OperationStatus create(DeviceId id, const CreateMouseOptions &options) {
         device_name_ = options.profile.name;
-        return create_uinput_device(options.profile, id);
+        auto status = create_uinput_device(options.profile, id);
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+        if (status.ok()) {
+          absolute_display_ = XOpenDisplay(nullptr);
+          if (absolute_display_ != nullptr && !query_xtest(absolute_display_)) {
+            XCloseDisplay(absolute_display_);
+            absolute_display_ = nullptr;
+          }
+        }
+#endif
+        return status;
       }
 
       OperationStatus submit(const MouseEvent &event) override {
@@ -1552,6 +1566,12 @@ namespace lvh::detail {
       }
 
       OperationStatus close() override {
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+        if (absolute_display_ != nullptr) {
+          XCloseDisplay(absolute_display_);
+          absolute_display_ = nullptr;
+        }
+#endif
         return close_uinput("uinput mouse");
       }
 
@@ -1561,6 +1581,9 @@ namespace lvh::detail {
 
     private:
       std::string device_name_;
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+      Display *absolute_display_ = nullptr;
+#endif
 
       OperationStatus submit_relative_motion(const MouseEvent &event) {
         if (event.x != 0) {
@@ -1577,6 +1600,25 @@ namespace lvh::detail {
       }
 
       OperationStatus submit_absolute_motion(const MouseEvent &event) {
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+        // Xorg/libinput classifies a device that advertises REL_X/REL_Y as a
+        // relative mouse and does not expose its ABS_X/ABS_Y valuators. Keep
+        // uinput for low-latency relative motion, buttons, and scrolling, but
+        // use XTest for the absolute positioning requested by remote-desktop
+        // clients. The persistent display avoids reconnecting for every event.
+        if (absolute_display_ != nullptr) {
+          const auto screen = DefaultScreen(absolute_display_);
+          const auto screen_width = DisplayWidth(absolute_display_, screen);
+          const auto screen_height = DisplayHeight(absolute_display_, screen);
+          const auto x = scale_absolute_axis(event.x, event.width) *
+            std::max(screen_width - 1, 0) / absolute_axis_max;
+          const auto y = scale_absolute_axis(event.y, event.height) *
+            std::max(screen_height - 1, 0) / absolute_axis_max;
+          XTestFakeMotionEvent(absolute_display_, screen, x, y, CurrentTime);
+          XFlush(absolute_display_);
+          return OperationStatus::success();
+        }
+#endif
         if (const auto status = emit_event(EV_ABS, ABS_X, scale_absolute_axis(event.x, event.width)); !status.ok()) {
           return status;
         }
