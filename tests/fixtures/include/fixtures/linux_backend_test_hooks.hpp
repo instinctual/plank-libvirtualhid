@@ -71,15 +71,6 @@ namespace lvh::detail::test {
      */
     std::size_t xtest_motion_count = 0;
 
-    /**
-     * @brief XTest button numbers in submission order.
-     */
-    std::vector<std::uint32_t> xtest_buttons;
-
-    /**
-     * @brief XTest button states in submission order.
-     */
-    std::vector<bool> xtest_pressed;
   };
 
   /**
@@ -788,7 +779,7 @@ namespace lvh::detail::test {
   LinuxInputSubmissionResult linux_uinput_mouse_submit_pipe(const MouseEvent &event);
 
   /**
-   * @brief Exercise absolute XTest buttons and relative uinput buttons.
+   * @brief Exercise absolute XTest motion with uinput click/drag routing.
    *
    * @return Captured transport calls and overall status.
    */

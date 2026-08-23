@@ -151,8 +151,6 @@ namespace lvh::detail::test {
       std::atomic_int x_keycode_call_count = 0;
       int fail_x_keycode_call = -1;
       std::atomic_size_t xtest_motion_count = 0;
-      std::vector<std::uint32_t> xtest_buttons;
-      std::vector<bool> xtest_pressed;
       bool override_libevdev = false;
       bool libevdev_new_returns_null = false;
       bool fail_libevdev_event_type = false;
@@ -372,11 +370,7 @@ int lvh_linux_test_xtest_fake_key_event(Display *, unsigned int, Bool, unsigned 
   return 1;
 }
 
-int lvh_linux_test_xtest_fake_button_event(Display *, unsigned int button, Bool pressed, unsigned long) {
-  if (lvh::detail::test::active_test_syscalls() != nullptr) {
-    lvh::detail::test::active_test_syscalls()->xtest_buttons.push_back(button);
-    lvh::detail::test::active_test_syscalls()->xtest_pressed.push_back(pressed == True);
-  }
+int lvh_linux_test_xtest_fake_button_event(Display *, unsigned int, Bool, unsigned long) {
   return 1;
 }
 
@@ -1363,9 +1357,12 @@ namespace lvh::detail::test {
 
     submit({.kind = MouseEventKind::absolute_motion, .x = 50, .y = 50, .width = 100, .height = 100});
     submit({.kind = MouseEventKind::button, .button = MouseButton::left, .pressed = true});
-    // Switching motion mode during a drag must not move the release to uinput.
-    submit({.kind = MouseEventKind::relative_motion, .x = 1, .y = -1});
+    // Absolute movement during a drag must stay on the uinput button device.
+    submit({.kind = MouseEventKind::absolute_motion, .x = 60, .y = 55, .width = 100, .height = 100});
     submit({.kind = MouseEventKind::button, .button = MouseButton::left, .pressed = false});
+    // The next unpressed absolute event returns to exact XTest positioning.
+    submit({.kind = MouseEventKind::absolute_motion, .x = 70, .y = 60, .width = 100, .height = 100});
+    submit({.kind = MouseEventKind::relative_motion, .x = 1, .y = -1});
     // Once relative mode is active, a complete click remains on uinput.
     submit({.kind = MouseEventKind::button, .button = MouseButton::right, .pressed = true});
     submit({.kind = MouseEventKind::button, .button = MouseButton::right, .pressed = false});
@@ -1374,8 +1371,6 @@ namespace lvh::detail::test {
       .status = std::move(status),
       .uinput_write_count = static_cast<std::size_t>(syscalls.write_call_count.load()),
       .xtest_motion_count = syscalls.xtest_motion_count.load(),
-      .xtest_buttons = std::move(syscalls.xtest_buttons),
-      .xtest_pressed = std::move(syscalls.xtest_pressed),
     };
 #else
     return {

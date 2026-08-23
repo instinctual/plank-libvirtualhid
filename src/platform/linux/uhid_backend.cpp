@@ -101,7 +101,6 @@ namespace lvh::detail {
 
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
     bool query_xtest(Display *display);
-    int mouse_button_to_xtest(MouseButton button);
 #endif
 #if defined(__linux__)
     namespace ps = playstation_feature_reports;
@@ -1584,21 +1583,25 @@ namespace lvh::detail {
       std::string device_name_;
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
       Display *absolute_display_ = nullptr;
-      bool absolute_mode_active_ = false;
-      std::set<MouseButton> xtest_pressed_buttons_;
+      std::optional<std::pair<int, int>> absolute_position_;
+      std::set<MouseButton> uinput_pressed_buttons_;
 #endif
 
       OperationStatus submit_relative_motion(const MouseEvent &event) {
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
-        absolute_mode_active_ = false;
+        absolute_position_.reset();
 #endif
-        if (event.x != 0) {
-          if (const auto status = emit_event(EV_REL, REL_X, event.x); !status.ok()) {
+        return submit_relative_delta(event.x, event.y);
+      }
+
+      OperationStatus submit_relative_delta(std::int32_t x, std::int32_t y) {
+        if (x != 0) {
+          if (const auto status = emit_event(EV_REL, REL_X, x); !status.ok()) {
             return status;
           }
         }
-        if (event.y != 0) {
-          if (const auto status = emit_event(EV_REL, REL_Y, event.y); !status.ok()) {
+        if (y != 0) {
+          if (const auto status = emit_event(EV_REL, REL_Y, y); !status.ok()) {
             return status;
           }
         }
@@ -1610,12 +1613,13 @@ namespace lvh::detail {
         // Xorg/libinput classifies a device that advertises REL_X/REL_Y as a
         // relative mouse and does not expose its ABS_X/ABS_Y valuators. Keep
         // uinput for low-latency relative motion, but use XTest for the
-        // absolute pointer requested by remote-desktop clients. Motion and
-        // buttons must use the same X11 pointer device: mixing XTest motion
-        // with uinput buttons makes Xorg switch core-pointer slaves between a
-        // button press and release, which prevents applications from seeing a
-        // complete click. The persistent display also avoids reconnecting for
-        // every event.
+        // absolute pointer requested by remote-desktop clients. GNOME Shell
+        // ignores XTest-generated button events, so buttons remain on uinput.
+        // While a uinput button is held, convert absolute movement to uinput
+        // deltas too; this prevents Xorg from switching core-pointer slaves
+        // between the press and release. The next unpressed absolute event
+        // returns to exact XTest positioning. The persistent display avoids
+        // reconnecting for every event.
         if (absolute_display_ != nullptr) {
           const auto screen = DefaultScreen(absolute_display_);
           const auto screen_width = DisplayWidth(absolute_display_, screen);
@@ -1624,12 +1628,16 @@ namespace lvh::detail {
             std::max(screen_width - 1, 0) / absolute_axis_max;
           const auto y = scale_absolute_axis(event.y, event.height) *
             std::max(screen_height - 1, 0) / absolute_axis_max;
+          const auto previous_position = absolute_position_;
+          absolute_position_ = std::pair {x, y};
+          if (!uinput_pressed_buttons_.empty() && previous_position.has_value()) {
+            return submit_relative_delta(x - previous_position->first, y - previous_position->second);
+          }
           XTestFakeMotionEvent(absolute_display_, screen, x, y, CurrentTime);
           XFlush(absolute_display_);
-          absolute_mode_active_ = true;
           return OperationStatus::success();
         }
-        absolute_mode_active_ = false;
+        absolute_position_.reset();
 #endif
         if (const auto status = emit_event(EV_ABS, ABS_X, scale_absolute_axis(event.x, event.width)); !status.ok()) {
           return status;
@@ -1641,32 +1649,20 @@ namespace lvh::detail {
       }
 
       OperationStatus submit_button(const MouseEvent &event) {
-#if defined(LIBVIRTUALHID_HAVE_XTEST)
-        // A release follows the transport used for its press. This preserves
-        // button pairing if the client changes motion mode during a drag.
-        const auto use_xtest = event.pressed ?
-                                 absolute_mode_active_ :
-                                 xtest_pressed_buttons_.contains(event.button);
-        if (use_xtest && absolute_display_ != nullptr) {
-          XTestFakeButtonEvent(
-            absolute_display_,
-            mouse_button_to_xtest(event.button),
-            event.pressed ? True : False,
-            CurrentTime
-          );
-          if (event.pressed) {
-            xtest_pressed_buttons_.insert(event.button);
-          } else {
-            xtest_pressed_buttons_.erase(event.button);
-          }
-          XFlush(absolute_display_);
-          return OperationStatus::success();
-        }
-#endif
         if (const auto status = emit_event(EV_KEY, static_cast<std::uint16_t>(mouse_button_to_linux(event.button)), event.pressed ? 1 : 0); !status.ok()) {
           return status;
         }
-        return sync();
+        if (const auto status = sync(); !status.ok()) {
+          return status;
+        }
+#if defined(LIBVIRTUALHID_HAVE_XTEST)
+        if (event.pressed) {
+          uinput_pressed_buttons_.insert(event.button);
+        } else {
+          uinput_pressed_buttons_.erase(event.button);
+        }
+#endif
+        return OperationStatus::success();
       }
 
       OperationStatus submit_vertical_scroll(std::int32_t distance) {
