@@ -82,6 +82,7 @@ namespace lvh::detail {
     constexpr std::array uinput_paths {"/dev/uinput"};
 #endif
     constexpr auto absolute_axis_max = 65535;
+    constexpr std::int64_t high_resolution_scroll_units_per_detent = 120;
     constexpr auto touch_axis_max_x = 19200;
     constexpr auto touch_axis_max_y = 10800;
     constexpr auto touch_max_contacts = 16;
@@ -847,7 +848,7 @@ namespace lvh::detail {
         return 0;
       }
 
-      if (const auto steps = distance / 120; steps != 0) {
+      if (const auto steps = distance / high_resolution_scroll_units_per_detent; steps != 0) {
         return steps;
       }
       return distance > 0 ? 1 : -1;
@@ -1050,22 +1051,20 @@ namespace lvh::detail {
         }
       }
 
+      if (const auto status = enable_evdev_code(device, EV_REL, REL_WHEEL, "vertical scroll"); !status.ok()) {
+        return status;
+      }
 #if defined(REL_WHEEL_HI_RES)
       if (const auto status = enable_evdev_code(device, EV_REL, REL_WHEEL_HI_RES, "high-resolution vertical scroll"); !status.ok()) {
         return status;
       }
-#else
-      if (const auto status = enable_evdev_code(device, EV_REL, REL_WHEEL, "vertical scroll"); !status.ok()) {
-        return status;
-      }
 #endif
 
-#if defined(REL_HWHEEL_HI_RES)
-      if (const auto status = enable_evdev_code(device, EV_REL, REL_HWHEEL_HI_RES, "high-resolution horizontal scroll"); !status.ok()) {
+      if (const auto status = enable_evdev_code(device, EV_REL, REL_HWHEEL, "horizontal scroll"); !status.ok()) {
         return status;
       }
-#else
-      if (const auto status = enable_evdev_code(device, EV_REL, REL_HWHEEL, "horizontal scroll"); !status.ok()) {
+#if defined(REL_HWHEEL_HI_RES)
+      if (const auto status = enable_evdev_code(device, EV_REL, REL_HWHEEL_HI_RES, "high-resolution horizontal scroll"); !status.ok()) {
         return status;
       }
 #endif
@@ -1581,6 +1580,12 @@ namespace lvh::detail {
 
     private:
       std::string device_name_;
+#if defined(REL_WHEEL_HI_RES)
+      std::int64_t vertical_scroll_remainder_ = 0;
+#endif
+#if defined(REL_HWHEEL_HI_RES)
+      std::int64_t horizontal_scroll_remainder_ = 0;
+#endif
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
       Display *absolute_display_ = nullptr;
       std::optional<std::pair<int, int>> absolute_position_;
@@ -1667,6 +1672,16 @@ namespace lvh::detail {
 
       OperationStatus submit_vertical_scroll(std::int32_t distance) {
 #if defined(REL_WHEEL_HI_RES)
+        const auto accumulated_distance = vertical_scroll_remainder_ + distance;
+        // Linux high-resolution wheels must also report each accumulated
+        // detent on the legacy axis for consumers that do not read HI_RES.
+        const auto legacy_steps = accumulated_distance / high_resolution_scroll_units_per_detent;
+        vertical_scroll_remainder_ = accumulated_distance - legacy_steps * high_resolution_scroll_units_per_detent;
+        if (legacy_steps != 0) {
+          if (const auto status = emit_event(EV_REL, REL_WHEEL, static_cast<std::int32_t>(legacy_steps)); !status.ok()) {
+            return status;
+          }
+        }
         if (const auto status = emit_event(EV_REL, REL_WHEEL_HI_RES, distance); !status.ok()) {
           return status;
         }
@@ -1680,6 +1695,14 @@ namespace lvh::detail {
 
       OperationStatus submit_horizontal_scroll(std::int32_t distance) {
 #if defined(REL_HWHEEL_HI_RES)
+        const auto accumulated_distance = horizontal_scroll_remainder_ + distance;
+        const auto legacy_steps = accumulated_distance / high_resolution_scroll_units_per_detent;
+        horizontal_scroll_remainder_ = accumulated_distance - legacy_steps * high_resolution_scroll_units_per_detent;
+        if (legacy_steps != 0) {
+          if (const auto status = emit_event(EV_REL, REL_HWHEEL, static_cast<std::int32_t>(legacy_steps)); !status.ok()) {
+            return status;
+          }
+        }
         if (const auto status = emit_event(EV_REL, REL_HWHEEL_HI_RES, distance); !status.ok()) {
           return status;
         }
