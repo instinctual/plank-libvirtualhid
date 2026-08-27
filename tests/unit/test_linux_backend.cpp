@@ -702,18 +702,18 @@ TEST_F(LinuxBackendTest, UinputMouseAccumulatesLegacyScrollDetents) {
 }
 #endif
 
-TEST_F(LinuxBackendTest, UinputMouseKeepsAbsoluteDragOnUinputUntilRelease) {
+TEST_F(LinuxBackendTest, UinputMouseKeepsAbsoluteDragOnXTest) {
   const auto result = lvh::detail::test::linux_uinput_mouse_transport_sequence();
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
   ASSERT_TRUE(result.status.ok()) << result.status.message();
-  EXPECT_EQ(result.xtest_motion_count, 2U);
+  EXPECT_EQ(result.xtest_motion_count, 3U);
   EXPECT_EQ(
     result.xtest_motion_positions,
-    (std::vector<std::pair<int, int>> {{50, 50}, {70, 60}})
+    (std::vector<std::pair<int, int>> {{50, 50}, {60, 55}, {70, 60}})
   );
-  // Left press/SYN, drag X/Y/SYN, left release/SYN, relative X/Y/SYN,
-  // and the right-button press/SYN and release/SYN.
-  EXPECT_EQ(result.uinput_write_count, 14U);
+  // Left press/SYN, left release/SYN, relative X/Y/SYN, and the
+  // right-button press/SYN and release/SYN.
+  EXPECT_EQ(result.uinput_write_count, 11U);
 #else
   EXPECT_EQ(result.status.code(), lvh::ErrorCode::backend_unavailable);
 #endif

@@ -1603,14 +1603,9 @@ namespace lvh::detail {
 #endif
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
       Display *absolute_display_ = nullptr;
-      std::optional<std::pair<int, int>> absolute_position_;
-      std::set<MouseButton> uinput_pressed_buttons_;
 #endif
 
       OperationStatus submit_relative_motion(const MouseEvent &event) {
-#if defined(LIBVIRTUALHID_HAVE_XTEST)
-        absolute_position_.reset();
-#endif
         return submit_relative_delta(event.x, event.y);
       }
 
@@ -1634,29 +1629,23 @@ namespace lvh::detail {
         // relative mouse and does not expose its ABS_X/ABS_Y valuators. Keep
         // uinput for low-latency relative motion, but use XTest for the
         // absolute pointer requested by remote-desktop clients. GNOME Shell
-        // ignores XTest-generated button events, so buttons remain on uinput.
-        // While a uinput button is held, convert absolute movement to uinput
-        // deltas too; this prevents Xorg from switching core-pointer slaves
-        // between the press and release. The next unpressed absolute event
-        // returns to exact XTest positioning. The persistent display avoids
-        // reconnecting for every event. Use the caller's current desktop
-        // viewport directly: Xlib caches DisplayWidth()/DisplayHeight() on a
-        // persistent connection, so those values become stale after RandR
-        // changes the remote desktop layout.
+        // ignores XTest-generated button events, so paired button press and
+        // release events remain on uinput. Absolute motion stays on XTest even
+        // while a button is held; routing drag motion through uinput would
+        // apply relative-pointer acceleration and make it diverge from the
+        // absolute client cursor. The persistent display avoids reconnecting
+        // for every event. Use the caller's current desktop viewport directly:
+        // Xlib caches DisplayWidth()/DisplayHeight() on a persistent connection,
+        // so those values become stale after RandR changes the remote desktop
+        // layout.
         if (absolute_display_ != nullptr) {
           const auto screen = DefaultScreen(absolute_display_);
           const auto x = xtest_viewport_coordinate(event.x, event.width);
           const auto y = xtest_viewport_coordinate(event.y, event.height);
-          const auto previous_position = absolute_position_;
-          absolute_position_ = std::pair {x, y};
-          if (!uinput_pressed_buttons_.empty() && previous_position.has_value()) {
-            return submit_relative_delta(x - previous_position->first, y - previous_position->second);
-          }
           XTestFakeMotionEvent(absolute_display_, screen, x, y, CurrentTime);
           XFlush(absolute_display_);
           return OperationStatus::success();
         }
-        absolute_position_.reset();
 #endif
         if (const auto status = emit_event(EV_ABS, ABS_X, scale_absolute_axis(event.x, event.width)); !status.ok()) {
           return status;
@@ -1674,13 +1663,6 @@ namespace lvh::detail {
         if (const auto status = sync(); !status.ok()) {
           return status;
         }
-#if defined(LIBVIRTUALHID_HAVE_XTEST)
-        if (event.pressed) {
-          uinput_pressed_buttons_.insert(event.button);
-        } else {
-          uinput_pressed_buttons_.erase(event.button);
-        }
-#endif
         return OperationStatus::success();
       }
 
