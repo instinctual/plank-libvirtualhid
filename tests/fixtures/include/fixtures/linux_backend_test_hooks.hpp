@@ -71,6 +71,11 @@ namespace lvh::detail::test {
      */
     std::size_t xtest_motion_count = 0;
 
+    /**
+     * @brief Absolute viewport coordinates sent through XTest.
+     */
+    std::vector<std::pair<int, int>> xtest_motion_positions;
+
   };
 
   /**
@@ -494,6 +499,15 @@ namespace lvh::detail::test {
    * @return Linux absolute axis value.
    */
   int linux_absolute_axis(std::int32_t value, std::int32_t limit);
+
+  /**
+   * @brief Clamp a pixel coordinate to an XTest target viewport.
+   *
+   * @param value Requested pixel coordinate.
+   * @param limit Target viewport dimension.
+   * @return Valid XTest pixel coordinate.
+   */
+  int linux_xtest_viewport_coordinate(std::int32_t value, std::int32_t limit);
 
   /**
    * @brief Decode UTF-8 into Unicode code points using the Linux backend decoder.

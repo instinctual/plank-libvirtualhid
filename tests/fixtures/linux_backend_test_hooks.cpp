@@ -151,6 +151,7 @@ namespace lvh::detail::test {
       std::atomic_int x_keycode_call_count = 0;
       int fail_x_keycode_call = -1;
       std::atomic_size_t xtest_motion_count = 0;
+      std::vector<std::pair<int, int>> xtest_motion_positions;
       bool override_libevdev = false;
       bool libevdev_new_returns_null = false;
       bool fail_libevdev_event_type = false;
@@ -358,14 +359,6 @@ int lvh_linux_test_default_screen(Display *) {
   return 0;
 }
 
-int lvh_linux_test_display_width(Display *, int) {
-  return 1920;
-}
-
-int lvh_linux_test_display_height(Display *, int) {
-  return 1080;
-}
-
 int lvh_linux_test_xtest_fake_key_event(Display *, unsigned int, Bool, unsigned long) {
   return 1;
 }
@@ -374,9 +367,10 @@ int lvh_linux_test_xtest_fake_button_event(Display *, unsigned int, Bool, unsign
   return 1;
 }
 
-int lvh_linux_test_xtest_fake_motion_event(Display *, int, int, int, unsigned long) {
+int lvh_linux_test_xtest_fake_motion_event(Display *, int, int x, int y, unsigned long) {
   if (lvh::detail::test::active_test_syscalls() != nullptr) {
     ++lvh::detail::test::active_test_syscalls()->xtest_motion_count;
+    lvh::detail::test::active_test_syscalls()->xtest_motion_positions.emplace_back(x, y);
   }
   return 1;
 }
@@ -565,16 +559,7 @@ extern "C" void lvh_linux_test_libevdev_uinput_destroy(libevdev_uinput *raw_uinp
     #if defined(DefaultScreen)
       #undef DefaultScreen  // NOSONAR(cpp:S959): X11 exposes this as a macro; the test hook replaces it while including the backend.
     #endif
-    #if defined(DisplayHeight)
-      #undef DisplayHeight  // NOSONAR(cpp:S959): X11 exposes this as a macro; the test hook replaces it while including the backend.
-    #endif
-    #if defined(DisplayWidth)
-      #undef DisplayWidth  // NOSONAR(cpp:S959): X11 exposes this as a macro; the test hook replaces it while including the backend.
-    #endif
-
     #define DefaultScreen lvh_linux_test_default_screen
-    #define DisplayHeight lvh_linux_test_display_height
-    #define DisplayWidth lvh_linux_test_display_width
     #define XCloseDisplay lvh_linux_test_x_close_display
     #define XFlush lvh_linux_test_x_flush
     #define XKeysymToKeycode lvh_linux_test_x_keysym_to_keycode
@@ -600,8 +585,6 @@ extern "C" void lvh_linux_test_libevdev_uinput_destroy(libevdev_uinput *raw_uinp
     #undef XKeysymToKeycode
     #undef XFlush
     #undef XCloseDisplay
-    #undef DisplayWidth
-    #undef DisplayHeight
     #undef DefaultScreen
   #endif
 
@@ -988,6 +971,10 @@ namespace lvh::detail::test {
 
   int linux_absolute_axis(std::int32_t value, std::int32_t limit) {
     return scale_absolute_axis(value, limit);
+  }
+
+  int linux_xtest_viewport_coordinate(std::int32_t value, std::int32_t limit) {
+    return xtest_viewport_coordinate(value, limit);
   }
 
   std::vector<std::uint32_t> linux_decode_utf8(const std::string &text) {
@@ -1381,6 +1368,7 @@ namespace lvh::detail::test {
       .status = std::move(status),
       .uinput_write_count = static_cast<std::size_t>(syscalls.write_call_count.load()),
       .xtest_motion_count = syscalls.xtest_motion_count.load(),
+      .xtest_motion_positions = std::move(syscalls.xtest_motion_positions),
     };
 #else
     return {

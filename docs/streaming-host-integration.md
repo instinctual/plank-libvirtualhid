@@ -25,6 +25,12 @@ A streaming host should be able to:
 `libvirtualhid` should not own the host application's network transport, packet
 schema, configuration model, controller assignment policy, or status API.
 
+Absolute mouse events carry pixel coordinates and the current target viewport
+dimensions. On Linux, the X11/XTest paths use that caller-supplied viewport
+directly. Streaming hosts should update it whenever the remote desktop layout
+changes; this keeps pointer placement correct across RandR mode and layout
+transitions without relying on cached Xlib screen geometry.
+
 ## Adapter Pattern
 
 The `examples/gamepad_adapter.cpp` example demonstrates the

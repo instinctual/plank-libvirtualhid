@@ -718,6 +718,21 @@ namespace lvh::detail {
       return static_cast<int>(numerator / limit);
     }
 
+    /**
+     * @brief Clamp an absolute XTest coordinate to the caller's live viewport.
+     *
+     * @param value Requested pixel coordinate.
+     * @param limit Current viewport dimension supplied with the mouse event.
+     * @return A valid pixel coordinate for the current viewport.
+     */
+    int xtest_viewport_coordinate(std::int32_t value, std::int32_t limit) {
+      if (limit <= 0) {
+        return 0;
+      }
+
+      return std::clamp(value, 0, limit - 1);
+    }
+
     int scale_normalized_axis(float value, int maximum) {
       return static_cast<int>(std::lround(std::clamp(value, 0.0F, 1.0F) * static_cast<float>(maximum)));
     }
@@ -1624,15 +1639,14 @@ namespace lvh::detail {
         // deltas too; this prevents Xorg from switching core-pointer slaves
         // between the press and release. The next unpressed absolute event
         // returns to exact XTest positioning. The persistent display avoids
-        // reconnecting for every event.
+        // reconnecting for every event. Use the caller's current desktop
+        // viewport directly: Xlib caches DisplayWidth()/DisplayHeight() on a
+        // persistent connection, so those values become stale after RandR
+        // changes the remote desktop layout.
         if (absolute_display_ != nullptr) {
           const auto screen = DefaultScreen(absolute_display_);
-          const auto screen_width = DisplayWidth(absolute_display_, screen);
-          const auto screen_height = DisplayHeight(absolute_display_, screen);
-          const auto x = scale_absolute_axis(event.x, event.width) *
-            std::max(screen_width - 1, 0) / absolute_axis_max;
-          const auto y = scale_absolute_axis(event.y, event.height) *
-            std::max(screen_height - 1, 0) / absolute_axis_max;
+          const auto x = xtest_viewport_coordinate(event.x, event.width);
+          const auto y = xtest_viewport_coordinate(event.y, event.height);
           const auto previous_position = absolute_position_;
           absolute_position_ = std::pair {x, y};
           if (!uinput_pressed_buttons_.empty() && previous_position.has_value()) {
@@ -2370,10 +2384,8 @@ namespace lvh::detail {
     private:
       void submit_absolute_motion(const MouseEvent &event) {
         const auto screen = DefaultScreen(display_);
-        const auto screen_width = DisplayWidth(display_, screen);
-        const auto screen_height = DisplayHeight(display_, screen);
-        const auto x = scale_absolute_axis(event.x, event.width) * std::max(screen_width - 1, 0) / absolute_axis_max;
-        const auto y = scale_absolute_axis(event.y, event.height) * std::max(screen_height - 1, 0) / absolute_axis_max;
+        const auto x = xtest_viewport_coordinate(event.x, event.width);
+        const auto y = xtest_viewport_coordinate(event.y, event.height);
         XTestFakeMotionEvent(display_, screen, x, y, CurrentTime);
       }
 

@@ -707,12 +707,23 @@ TEST_F(LinuxBackendTest, UinputMouseKeepsAbsoluteDragOnUinputUntilRelease) {
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
   ASSERT_TRUE(result.status.ok()) << result.status.message();
   EXPECT_EQ(result.xtest_motion_count, 2U);
+  EXPECT_EQ(
+    result.xtest_motion_positions,
+    (std::vector<std::pair<int, int>> {{50, 50}, {70, 60}})
+  );
   // Left press/SYN, drag X/Y/SYN, left release/SYN, relative X/Y/SYN,
   // and the right-button press/SYN and release/SYN.
   EXPECT_EQ(result.uinput_write_count, 14U);
 #else
   EXPECT_EQ(result.status.code(), lvh::ErrorCode::backend_unavailable);
 #endif
+}
+
+TEST_F(LinuxBackendTest, XTestCoordinatesUseCurrentCallerViewport) {
+  EXPECT_EQ(lvh::detail::test::linux_xtest_viewport_coordinate(1450, 2560), 1450);
+  EXPECT_EQ(lvh::detail::test::linux_xtest_viewport_coordinate(-1, 2560), 0);
+  EXPECT_EQ(lvh::detail::test::linux_xtest_viewport_coordinate(2560, 2560), 2559);
+  EXPECT_EQ(lvh::detail::test::linux_xtest_viewport_coordinate(1, 0), 0);
 }
 
 TEST_F(LinuxBackendTest, PipeBackedUinputTouchDevicesEmitEvents) {
