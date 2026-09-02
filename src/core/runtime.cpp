@@ -237,8 +237,8 @@ namespace lvh {
     }
 
     OperationStatus validate_keyboard_event(const KeyboardEvent &event) {
-      if (event.key_code == 0) {
-        return OperationStatus::failure(ErrorCode::invalid_argument, "keyboard key code must not be zero");
+      if (event.key_code == 0 && event.scan_code == 0) {
+        return OperationStatus::failure(ErrorCode::invalid_argument, "keyboard key code and scan code must not both be zero");
       }
 
       return OperationStatus::success();

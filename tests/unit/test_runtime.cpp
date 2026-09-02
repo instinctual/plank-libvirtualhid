@@ -219,8 +219,11 @@ TEST(RuntimeTest, CreatesSubmitsAndClosesKeyboard) {
   EXPECT_TRUE(created.keyboard->last_submitted_event().pressed);
 
   EXPECT_TRUE(created.keyboard->release(0x41).ok());
+  EXPECT_TRUE(created.keyboard->submit({.pressed = true, .scan_code = 0xe04d}).ok());
+  EXPECT_EQ(created.keyboard->last_submitted_event().key_code, 0U);
+  EXPECT_EQ(created.keyboard->last_submitted_event().scan_code, 0xe04d);
   EXPECT_TRUE(created.keyboard->type_text({.text = "A"}).ok());
-  EXPECT_EQ(created.keyboard->submit_count(), 3U);
+  EXPECT_EQ(created.keyboard->submit_count(), 4U);
 
   EXPECT_EQ(created.keyboard->press(0).code(), lvh::ErrorCode::invalid_argument);
   EXPECT_TRUE(created.keyboard->close().ok());
