@@ -725,7 +725,9 @@ namespace lvh {
     bool pressed = false;
 
     /**
-     * @brief Optional platform scan code to submit instead of translating `key_code`.
+     * @brief Optional Set-1 scan code to submit instead of translating `key_code`.
+     *
+     * Extended scan codes retain their E0/E1 prefix in the high byte.
      */
     std::uint16_t scan_code = 0;
 

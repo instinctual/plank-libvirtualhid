@@ -952,6 +952,10 @@ namespace lvh::detail::test {
     return key_code_to_linux(key_code);
   }
 
+  int linux_set1_scan_code(std::uint16_t scan_code) {
+    return scan_code_set1_to_linux(scan_code);
+  }
+
   int linux_mouse_button(MouseButton button) {
     return mouse_button_to_linux(button);
   }

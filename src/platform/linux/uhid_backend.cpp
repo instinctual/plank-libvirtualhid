@@ -689,6 +689,52 @@ namespace lvh::detail {
       return -1;
     }
 
+    // Set-1 scan-code mappings intentionally match Kyber kynput's pinned
+    // keycode 1.0.0 table, derived from Chromium keycode_conversion_data.inc
+    // (Copyright 2013 The Chromium Authors, BSD-style license). Most original
+    // PC keys retained their numeric value in Linux evdev; this table contains
+    // the exceptions and extended keys. An E0/E1 prefix is stored in the high
+    // byte.
+    constexpr std::array<std::pair<std::uint16_t, int>, 71> set1_scan_code_exceptions {{
+      {0x0045, 0x0077}, {0x0059, 0x0075}, {0x005c, 0x005f},
+      {0x0064, 0x00b7}, {0x0065, 0x00b8}, {0x0066, 0x00b9},
+      {0x0067, 0x00ba}, {0x0068, 0x00bb}, {0x0069, 0x00bc},
+      {0x006a, 0x00bd}, {0x006b, 0x00be}, {0x006c, 0x00bf},
+      {0x006d, 0x00c0}, {0x006e, 0x00c1}, {0x0070, 0x005d},
+      {0x0071, 0x007b}, {0x0072, 0x007a}, {0x0073, 0x0059},
+      {0x0076, 0x00c2}, {0x0077, 0x005b}, {0x0078, 0x005a},
+      {0x0079, 0x005c}, {0x007b, 0x005e}, {0x007d, 0x007c},
+      {0x007e, 0x0079}, {0xe008, 0x0083}, {0xe00a, 0x0087},
+      {0xe010, 0x00a5}, {0xe017, 0x0089}, {0xe018, 0x0085},
+      {0xe019, 0x00a3}, {0xe01c, 0x0060}, {0xe01d, 0x0061},
+      {0xe020, 0x0071}, {0xe021, 0x008c}, {0xe022, 0x00a4},
+      {0xe024, 0x00a6}, {0xe02c, 0x00a1}, {0xe02e, 0x0072},
+      {0xe030, 0x0073}, {0xe032, 0x00ac}, {0xe035, 0x0062},
+      {0xe037, 0x0063}, {0xe038, 0x0064}, {0xe03b, 0x008a},
+      {0xe045, 0x0045}, {0xe047, 0x0066}, {0xe048, 0x0067},
+      {0xe049, 0x0068}, {0xe04b, 0x0069}, {0xe04d, 0x006a},
+      {0xe04f, 0x006b}, {0xe050, 0x006c}, {0xe051, 0x006d},
+      {0xe052, 0x006e}, {0xe053, 0x006f}, {0xe05b, 0x007d},
+      {0xe05c, 0x007e}, {0xe05d, 0x007f}, {0xe05e, 0x0074},
+      {0xe05f, 0x008e}, {0xe063, 0x008f}, {0xe065, 0x00d9},
+      {0xe066, 0x009c}, {0xe067, 0x00ad}, {0xe068, 0x0080},
+      {0xe069, 0x009f}, {0xe06a, 0x009e}, {0xe06b, 0x0090},
+      {0xe06c, 0x009b}, {0xe06d, 0x00ab},
+    }};
+
+    int scan_code_set1_to_linux(std::uint16_t scan_code) {
+      if ((scan_code >= 0x0001 && scan_code <= 0x0044) ||
+          (scan_code >= 0x0046 && scan_code <= 0x0053) ||
+          (scan_code >= 0x0056 && scan_code <= 0x0058)) {
+        return scan_code;
+      }
+      if (const auto key = mapped_keyboard_code(
+            scan_code, set1_scan_code_exceptions); key.has_value()) {
+        return *key;
+      }
+      return -1;
+    }
+
     int mouse_button_to_linux(MouseButton button) {
       switch (button) {
         using enum MouseButton;
@@ -1033,6 +1079,16 @@ namespace lvh::detail {
         if (const auto linux_key = key_code_to_linux(key_code); linux_key >= 0) {
           linux_keys.insert(linux_key);
         }
+      }
+      for (std::uint16_t scan_code = 1; scan_code <= 0x0058; ++scan_code) {
+        if (const auto linux_key = scan_code_set1_to_linux(scan_code);
+            linux_key >= 0) {
+          linux_keys.insert(linux_key);
+        }
+      }
+      for (const auto &[scan_code, linux_key] : set1_scan_code_exceptions) {
+        static_cast<void>(scan_code);
+        linux_keys.insert(linux_key);
       }
       for (const auto linux_key : linux_keys) {
         if (const auto status = enable_evdev_code(device, EV_KEY, linux_key, "keyboard key"); !status.ok()) {
@@ -1470,7 +1526,9 @@ namespace lvh::detail {
 
     private:
       OperationStatus emit_keyboard_event(const KeyboardEvent &event) {
-        const auto linux_key = key_code_to_linux(event.key_code);
+        const auto linux_key = event.scan_code != 0U ?
+          scan_code_set1_to_linux(event.scan_code) :
+          key_code_to_linux(event.key_code);
         if (linux_key < 0) {
           return OperationStatus::failure(ErrorCode::invalid_argument, "keyboard key code is not supported by the Linux backend");
         }

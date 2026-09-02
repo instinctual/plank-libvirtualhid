@@ -458,6 +458,7 @@ namespace lvh::detail::test {
    * @return Linux key code, or `-1` when unsupported.
    */
   int linux_key_code(KeyboardKeyCode key_code);
+  int linux_set1_scan_code(std::uint16_t scan_code);
 
   /**
    * @brief Translate a mouse button to a Linux input button code.

@@ -111,6 +111,15 @@ TEST_F(LinuxBackendTest, TranslatesKeyboardKeys) {
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x88), -1);
 }
 
+TEST_F(LinuxBackendTest, TranslatesSet1ScanCodes) {
+  EXPECT_EQ(lvh::detail::test::linux_set1_scan_code(0x001e), KEY_A);
+  EXPECT_EQ(lvh::detail::test::linux_set1_scan_code(0x0045), KEY_PAUSE);
+  EXPECT_EQ(lvh::detail::test::linux_set1_scan_code(0xe045), KEY_NUMLOCK);
+  EXPECT_EQ(lvh::detail::test::linux_set1_scan_code(0xe01d), KEY_RIGHTCTRL);
+  EXPECT_EQ(lvh::detail::test::linux_set1_scan_code(0xe04d), KEY_RIGHT);
+  EXPECT_EQ(lvh::detail::test::linux_set1_scan_code(0xe100), -1);
+}
+
 TEST_F(LinuxBackendTest, TranslatesMouseButtonsAndBusTypes) {
   EXPECT_EQ(lvh::detail::test::linux_mouse_button(lvh::MouseButton::left), BTN_LEFT);
   EXPECT_EQ(lvh::detail::test::linux_mouse_button(lvh::MouseButton::middle), BTN_MIDDLE);
@@ -353,6 +362,16 @@ TEST_F(LinuxBackendTest, PipeBackedUinputKeyboardEmitsEvents) {
   EXPECT_EQ(result.events[1].type, EV_SYN);
   EXPECT_EQ(result.events[1].code, SYN_REPORT);
   EXPECT_EQ(result.events[1].value, 0);
+
+  const auto scan_code_result =
+    lvh::detail::test::linux_uinput_keyboard_submit_pipe(
+      {.pressed = true, .scan_code = 0xe04d}
+    );
+  ASSERT_TRUE(scan_code_result.status.ok()) << scan_code_result.status.message();
+  ASSERT_EQ(scan_code_result.events.size(), 2U);
+  EXPECT_EQ(scan_code_result.events[0].type, EV_KEY);
+  EXPECT_EQ(scan_code_result.events[0].code, KEY_RIGHT);
+  EXPECT_EQ(scan_code_result.events[0].value, 1);
 
   EXPECT_EQ(lvh::detail::test::linux_uinput_user_device_invalid_fd().code(), lvh::ErrorCode::backend_failure);
   EXPECT_EQ(lvh::detail::test::linux_uinput_user_device_pipe().code(), lvh::ErrorCode::backend_failure);
