@@ -54,6 +54,7 @@ TEST_F(LinuxBackendTest, TranslatesKeyboardKeys) {
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x10), KEY_LEFTSHIFT);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x11), KEY_LEFTCTRL);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x12), KEY_LEFTALT);
+  EXPECT_EQ(lvh::detail::test::linux_key_code(0x13), KEY_PAUSE);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x14), KEY_CAPSLOCK);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x1B), KEY_ESC);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x20), KEY_SPACE);
@@ -106,6 +107,7 @@ TEST_F(LinuxBackendTest, TranslatesKeyboardKeys) {
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x6F), KEY_KPSLASH);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x70), KEY_F1);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x7B), KEY_F12);
+  EXPECT_EQ(lvh::detail::test::linux_key_code(0x7E), KEY_F15);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x87), KEY_F24);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0), -1);
   EXPECT_EQ(lvh::detail::test::linux_key_code(0x88), -1);
@@ -356,6 +358,27 @@ TEST_F(LinuxBackendTest, PipeBackedUinputKeyboardEmitsEvents) {
 
   EXPECT_EQ(lvh::detail::test::linux_uinput_user_device_invalid_fd().code(), lvh::ErrorCode::backend_failure);
   EXPECT_EQ(lvh::detail::test::linux_uinput_user_device_pipe().code(), lvh::ErrorCode::backend_failure);
+}
+
+TEST_F(LinuxBackendTest, PipeBackedUinputKeyboardEmitsPauseAndF15Separately) {
+  for (const bool pressed : {true, false}) {
+    for (const auto key_code : {0x13, 0x7E}) {
+      SCOPED_TRACE(key_code);
+      SCOPED_TRACE(pressed);
+      const auto result = lvh::detail::test::linux_uinput_keyboard_submit_pipe({
+        .key_code = static_cast<lvh::KeyboardKeyCode>(key_code),
+        .pressed = pressed,
+      });
+      ASSERT_TRUE(result.status.ok()) << result.status.message();
+      ASSERT_EQ(result.events.size(), 2U);
+      EXPECT_EQ(result.events[0].type, EV_KEY);
+      EXPECT_EQ(result.events[0].code, key_code == 0x13 ? KEY_PAUSE : KEY_F15);
+      EXPECT_EQ(result.events[0].value, pressed ? 1 : 0);
+      EXPECT_EQ(result.events[1].type, EV_SYN);
+      EXPECT_EQ(result.events[1].code, SYN_REPORT);
+      EXPECT_EQ(result.events[1].value, 0);
+    }
+  }
 }
 
 TEST_F(LinuxBackendTest, PipeBackedUinputGamepadsUseCanonicalLinuxEvents) {
@@ -1045,6 +1068,8 @@ TEST_F(LinuxBackendTest, FakeUinputConstructionCoversCapabilitiesAndFailureBranc
   EXPECT_TRUE(has_type(keyboard, EV_KEY));
   EXPECT_NE(find_code(keyboard, EV_KEY, KEY_A), nullptr);
   EXPECT_NE(find_code(keyboard, EV_KEY, KEY_LEFTCTRL), nullptr);
+  EXPECT_NE(find_code(keyboard, EV_KEY, KEY_PAUSE), nullptr);
+  EXPECT_NE(find_code(keyboard, EV_KEY, KEY_F15), nullptr);
   EXPECT_EQ(find_code(keyboard, EV_KEY, KEY_POWER), nullptr);
   EXPECT_EQ(find_code(keyboard, EV_KEY, BTN_LEFT), nullptr);
   EXPECT_EQ(keyboard.destroy_count, 1U);
@@ -1304,6 +1329,7 @@ TEST_F(LinuxBackendTest, XTestFallbackCoversKeyboardAndMousePaths) {
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x10), XK_Shift_L);
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x11), XK_Control_L);
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x12), XK_Alt_L);
+  EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x13), XK_Pause);
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x14), XK_Caps_Lock);
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x1B), XK_Escape);
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x20), XK_space);
@@ -1347,6 +1373,7 @@ TEST_F(LinuxBackendTest, XTestFallbackCoversKeyboardAndMousePaths) {
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x6E), XK_KP_Decimal);
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x6F), XK_KP_Divide);
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x70), XK_F1);
+  EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x7E), XK_F15);
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x87), XK_F24);
   EXPECT_EQ(lvh::detail::test::linux_xtest_keysym(0x88), 0UL);
 
