@@ -541,7 +541,7 @@ namespace lvh::detail {
     }
 
     int key_code_to_linux(KeyboardKeyCode key_code) {
-      static constexpr std::array<std::pair<KeyboardKeyCode, int>, 47> special_keys {{
+      static constexpr std::array<std::pair<KeyboardKeyCode, int>, 48> special_keys {{
         {0x08, KEY_BACKSPACE},
         {0x09, KEY_TAB},
         {0x0D, KEY_ENTER},
@@ -551,6 +551,7 @@ namespace lvh::detail {
         {0xA2, KEY_LEFTCTRL},
         {0x12, KEY_LEFTALT},
         {0xA4, KEY_LEFTALT},
+        {0x13, KEY_PAUSE},
         {0x14, KEY_CAPSLOCK},
         {0x1B, KEY_ESC},
         {0x20, KEY_SPACE},
@@ -2136,7 +2137,7 @@ namespace lvh::detail {
 
 #if defined(LIBVIRTUALHID_HAVE_XTEST)
     KeySym key_code_to_keysym(KeyboardKeyCode key_code) {
-      static constexpr std::array<std::pair<KeyboardKeyCode, KeySym>, 45> special_keysyms {{
+      static constexpr std::array<std::pair<KeyboardKeyCode, KeySym>, 46> special_keysyms {{
         {0x08, XK_BackSpace},
         {0x09, XK_Tab},
         {0x0D, XK_Return},
@@ -2146,6 +2147,7 @@ namespace lvh::detail {
         {0xA2, XK_Control_L},
         {0x12, XK_Alt_L},
         {0xA4, XK_Alt_L},
+        {0x13, XK_Pause},
         {0x14, XK_Caps_Lock},
         {0x1B, XK_Escape},
         {0x20, XK_space},

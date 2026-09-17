@@ -92,6 +92,10 @@ The Linux backend uses standard user-space kernel interfaces:
 - X11/XTest only as a keyboard and mouse fallback when `uinput` cannot be used
   and an X11 session is available.
 
+Keyboard input supports the portable Pause key (`0x13`) as `KEY_PAUSE` through
+`uinput` and `XK_Pause` through XTest, including press and release. The portable
+F15 key (`0x7E`) retains its separate F15 mapping.
+
 Gamepad support normally prefers `uhid` because descriptors, raw HID identity,
 feature reports, and output reports matter for controller compatibility.
 Generic, Xbox-family, and Switch Pro profiles instead use `uinput` so SDL,
