@@ -137,6 +137,8 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     endif()
 
     if(BUILD_DOCS)
+        # The pinned doxyconfig HTML template uses the Doxygen 1.18 runtime.
+        find_package(Doxygen 1.18 REQUIRED COMPONENTS doxygen dot)
         add_subdirectory(third-party/doxyconfig docs)
     endif()
 
