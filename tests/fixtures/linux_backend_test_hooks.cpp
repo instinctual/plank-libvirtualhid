@@ -1437,6 +1437,37 @@ namespace lvh::detail::test {
     return {std::move(status), std::move(records)};
   }
 
+  LinuxInputSubmissionResult linux_uinput_pen_tablet_cleanup_pipe(PointerTransition transition) {
+    std::array<int, 2> descriptors {-1, -1};
+    if (::pipe(descriptors.data()) != 0) {
+      return {system_error_status(ErrorCode::backend_failure, "failed to create pipe", errno), {}};
+    }
+    UinputPenTablet pen {descriptors[1]};
+    PenToolState state {.tool = PenToolType::eraser, .x = 0.4F, .y = 0.6F, .pressure = 0.8F};
+    auto status = pen.place_tool(state);
+    for (const auto button : {PenButton::primary, PenButton::secondary, PenButton::tertiary}) {
+      if (status.ok()) {
+        status = pen.button(button, true);
+      }
+    }
+    // Cleanup must not require the caller to remember tool identity, pressure,
+    // or coordinates. A release, unlike leave/cancel, keeps the tool in range.
+    state.tool = PenToolType::unchanged;
+    state.transition = transition;
+    if (status.ok()) {
+      status = pen.place_tool(state);
+    }
+    state.tool = PenToolType::pen;
+    state.transition = PointerTransition::update;
+    if (status.ok()) {
+      status = pen.place_tool(state);
+    }
+    static_cast<void>(pen.close());
+    auto records = read_input_events_until_eof(descriptors[0]);
+    static_cast<void>(::close(descriptors[0]));
+    return {std::move(status), std::move(records)};
+  }
+
   LinuxInputSubmissionResult linux_uinput_trackpad_multi_contact_pipe() {
     std::array<int, 2> descriptors {-1, -1};
     if (::pipe(descriptors.data()) != 0) {

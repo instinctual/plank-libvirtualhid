@@ -7,6 +7,12 @@ moving local virtual device creation behind the `libvirtualhid` API.
 
 ## Integration Contract
 
+Linux normalized pen cleanup uses `PointerTransition::leave` or `cancel` to
+release tip pressure, barrel buttons and the last tool's proximity without
+moving the pointer. No cached coordinates or tool identity are required for
+cleanup. `release` ends tip contact but keeps the tool in range. Send cleanup
+when a remote input lease ends; ordinary button updates preserve tip pressure.
+
 A streaming host should be able to:
 
 - Create stable per-client gamepad handles with both client-relative and global

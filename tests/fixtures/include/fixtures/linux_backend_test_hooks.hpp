@@ -832,6 +832,13 @@ namespace lvh::detail::test {
   LinuxInputSubmissionResult linux_uinput_pen_tablet_tool_pipe(const PenToolState &state);
 
   /**
+   * @brief Submit a held eraser and buttons, then a cleanup transition and re-entry.
+   * @param transition Release, leave or cancel transition to exercise.
+   * @return Submission status and captured input events.
+   */
+  LinuxInputSubmissionResult linux_uinput_pen_tablet_cleanup_pipe(PointerTransition transition);
+
+  /**
    * @brief Submit multiple contacts through a pipe-backed uinput trackpad.
    *
    * @return Submission status and captured input events.

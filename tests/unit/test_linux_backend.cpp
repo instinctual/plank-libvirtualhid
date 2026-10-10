@@ -809,6 +809,44 @@ TEST_F(LinuxBackendTest, PipeBackedUinputTouchDevicesEmitEvents) {
   EXPECT_TRUE(saw_stylus);
 }
 
+TEST_F(LinuxBackendTest, PenCleanupReleasesContactAndAllowsFreshToolEntry) {
+  for (const auto transition : {lvh::PointerTransition::cancel, lvh::PointerTransition::leave, lvh::PointerTransition::release}) {
+    SCOPED_TRACE(static_cast<int>(transition));
+    const auto result = lvh::detail::test::linux_uinput_pen_tablet_cleanup_pipe(transition);
+    ASSERT_TRUE(result.status.ok()) << result.status.message();
+    // Initial tool frame, three button frames, cleanup frame, fresh tool frame.
+    std::vector<std::vector<lvh::detail::test::LinuxInputEventRecord>> frames;
+    frames.emplace_back();
+    for (const auto &event : result.events) {
+      if (event.type == EV_SYN) {
+        frames.emplace_back();
+      } else {
+        frames.back().push_back(event);
+      }
+    }
+    ASSERT_GE(frames.size(), 7U);
+    const auto has = [&](std::size_t frame, unsigned type, unsigned code, int value) {
+      return std::ranges::any_of(frames[frame], [&](const auto &event) {
+        return event.type == type && event.code == code && event.value == value;
+      });
+    };
+    EXPECT_TRUE(has(4, EV_KEY, BTN_TOUCH, 0));
+    EXPECT_TRUE(has(4, EV_ABS, ABS_PRESSURE, 0));
+    if (transition != lvh::PointerTransition::release) {
+      for (const auto key : {BTN_STYLUS, BTN_STYLUS2, BTN_STYLUS3, BTN_TOOL_RUBBER}) {
+        EXPECT_TRUE(has(4, EV_KEY, key, 0));
+      }
+      EXPECT_FALSE(std::ranges::any_of(frames[4], [](const auto &event) {
+        return event.type == EV_ABS && (event.code == ABS_X || event.code == ABS_Y);
+      }));
+    } else {
+      EXPECT_FALSE(has(4, EV_KEY, BTN_TOOL_RUBBER, 0));
+    }
+    EXPECT_TRUE(has(5, EV_KEY, BTN_TOOL_PEN, 1));
+    EXPECT_TRUE(has(5, EV_KEY, BTN_TOUCH, 1));
+  }
+}
+
 TEST_F(LinuxBackendTest, PipeBackedUinputTouchDevicesCoverStateTransitions) {
   auto result = lvh::detail::test::linux_uinput_trackpad_multi_contact_pipe();
   ASSERT_TRUE(result.status.ok()) << result.status.message();

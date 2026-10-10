@@ -2032,13 +2032,35 @@ namespace lvh::detail {
           return OperationStatus::failure(ErrorCode::device_closed, "uinput pen tablet is closed");
         }
 
+        if (state.transition == PointerTransition::cancel || state.transition == PointerTransition::leave) {
+          // End proximity without moving the pointer to the caller's dummy
+          // coordinates. Keep the previous tool cached until SYN succeeds so
+          // a failed write can be retried, including after a partial release.
+          if (const auto status = emit_pen_pressure(0.0F); !status.ok()) {
+            return status;
+          }
+          for (const auto code : {BTN_STYLUS, BTN_STYLUS2, BTN_STYLUS3}) {
+            if (const auto status = emit_event(EV_KEY, code, 0); !status.ok()) {
+              return status;
+            }
+          }
+          if (const auto status = emit_pen_tool(last_tool_, 0); !status.ok()) {
+            return status;
+          }
+          const auto status = sync();
+          if (status.ok()) {
+            last_tool_ = PenToolType::unchanged;
+          }
+          return status;
+        }
+
         if (const auto status = update_pen_tool(state.tool); !status.ok()) {
           return status;
         }
         if (const auto status = emit_pen_position(state); !status.ok()) {
           return status;
         }
-        if (const auto status = emit_pen_pressure(state.pressure); !status.ok()) {
+        if (const auto status = emit_pen_pressure(state.transition == PointerTransition::release ? 0.0F : state.pressure); !status.ok()) {
           return status;
         }
         if (const auto status = emit_pen_distance(state.distance); !status.ok()) {
